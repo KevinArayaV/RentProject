@@ -1,21 +1,23 @@
 "use client";
-import { AiOutlineMenu } from "react-icons/ai";import Avatar from "../Avatar";
+import { AiOutlineMenu } from "react-icons/ai";
+import Avatar from "../Avatar";
 import { useCallback, useState } from "react";
 import MenuItem from "./MenuItem";
-import useRegisterModal from "@/app/hooks/useRegisterModal";
-import useLoginModal from "@/app/hooks/useLoginModal";
+import useRegisterModal from "../../../hooks/useRegisterModal";
+import useLoginModal from "../../../hooks/useLoginModal";
+import useRentModal from "../../../hooks/useRentModal";
 import { signOut } from "next-auth/react";
 import { SafeUser } from "@/app/types";
-import useRentModal from "@/app/hooks/useRentModal";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 interface UserMenuProps {
    currentUser?: SafeUser | null;
 }
 
 const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
+   const t = useTranslations('UserMenu');
    const [isOpen, setIsOpen] = useState(false);
-
    const registerModal = useRegisterModal();
    const loginModal = useLoginModal();
    const rentModal = useRentModal();
@@ -29,11 +31,9 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
       if (!currentUser) {
          return loginModal.onOpen();
       }
-
-      // Open rent Modal
-
       rentModal.onOpen();
    }, [currentUser, loginModal, rentModal]);
+
    return (
       <div className="relative">
          <div className="flex flex-row items-center gap-3">
@@ -41,7 +41,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
                onClick={onRent}
                className="hidden md:block text-sm font-semibold py-3 px-4 rounded-full hover:bg-neutral-100 transition cursor-pointer"
             >
-               Airbnb your home
+               {t('airbnbYourHome')}
             </div>
             <div
                onClick={toogleOpen}
@@ -58,47 +58,18 @@ const UserMenu: React.FC<UserMenuProps> = ({ currentUser }) => {
                <div className="flex flex-col cursor-pointer">
                   {currentUser ? (
                      <>
-                        <MenuItem
-                           onClick={() => {
-                              router.push("/trips");
-                              setIsOpen(false);
-                           }}
-                           label="My Trips"
-                        />
-                        <MenuItem
-                           onClick={() => {
-                              router.push("/favorites");
-                              setIsOpen(false);
-                           }}
-                           label="My Favorites"
-                        />
-                        <MenuItem
-                           onClick={() => {
-                              router.push("/reservations");
-                              setIsOpen(false);
-                           }}
-                           label="My Reservations"
-                        />
-                        <MenuItem
-                           onClick={() => {
-                              router.push("/properties");
-                              setIsOpen(false);
-                           }}
-                           label="My Properties"
-                        />
-                        <MenuItem onClick={rentModal.onOpen} label="Airbnb my home" />
+                        <MenuItem onClick={() => router.push("/trips")} label={t('myTrips')} />
+                        <MenuItem onClick={() => router.push("/favorites")} label={t('myFavorites')} />
+                        <MenuItem onClick={() => router.push("/reservations")} label={t('myReservations')} />
+                        <MenuItem onClick={() => router.push("/properties")} label={t('myProperties')} />
+                        <MenuItem onClick={rentModal.onOpen} label={t('airbnbYourHome')} />
                         <hr />
-                        <MenuItem
-                           onClick={() => {
-                              signOut();
-                           }}
-                           label="Logout"
-                        />
+                        <MenuItem onClick={() => signOut()} label={t('logout')} />
                      </>
                   ) : (
                      <>
-                        <MenuItem onClick={loginModal.onOpen} label="Login" />
-                        <MenuItem onClick={registerModal.onOpen} label="Sign Up" />
+                        <MenuItem onClick={loginModal.onOpen} label={t('login')} />
+                        <MenuItem onClick={registerModal.onOpen} label={t('signUp')} />
                      </>
                   )}
                </div>

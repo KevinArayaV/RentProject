@@ -6,20 +6,18 @@ import { FieldValues, SubmitHandler, useForm } from "react-hook-form";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-
 import { IoMdHome } from 'react-icons/io';
 import { MdApartment } from 'react-icons/md';
-
-import useRentModal from "@/app/hooks/useRentModal";
-
+import useRentModal from "../../../hooks/useRentModal";
+import { useTranslations } from "next-intl";
 import Modal from "./Modal";
 import Counter from "../inputs/Counter";
 import CategoryInput from "../inputs/CategoryInput";
 import ImageUpload from "../inputs/ImageUpload";
 import Input from "../inputs/Input";
 import Heading from "../Heading";
-import InfoPopup from "@/app/components/InfoPopup";
-import ToggleInput from "@/app/components/inputs/ToggleInput";
+import InfoPopup from "../InfoPopup"; // Corrected Path
+import ToggleInput from "../inputs/ToggleInput"; // Corrected Path
 
 const customCategories = [
   { label: "Casa", icon: IoMdHome },
@@ -34,6 +32,7 @@ enum STEPS {
   DESCRIPTION_PRICE = 4,
 }
 
+// ... (rest of the file remains the same)
 const provinceCoordinates: { [key: string]: [number, number] } = {
     "San José": [9.9281, -84.0907],
     Alajuela: [10.0163, -84.2117],
@@ -52,19 +51,18 @@ const getProvinceKey = (provinceName: string) => {
     return null;
 }
 
-// ✅ Límites de Costa Rica para validación
 const costaRicaBounds = {
   southWest: { lat: 8.04, lng: -87.09 },
   northEast: { lat: 11.23, lng: -82.56 },
 };
 
 const RentModal = () => {
+    const t = useTranslations('RentModal');
     const router = useRouter();
     const rentModal = useRentModal();
     const [isLoading, setIsLoading] = useState(false);
     const [step, setStep] = useState(STEPS.CATEGORY);
     const [mapZoom, setMapZoom] = useState(14);
-    // ✅ 1. Añadimos la "bandera" para evitar la condición de carrera
     const isGeolocating = useRef(false);
 
     const {
@@ -134,9 +132,7 @@ const RentModal = () => {
         }
     }, [contactPhone, isWhatsappSame, setValue]);
 
-    // ✅ 2. El useEffect ahora respeta la "bandera"
     useEffect(() => {
-        // Si la geolocalización está activa, no hagas nada.
         if (isGeolocating.current) {
             return;
         }
@@ -153,7 +149,6 @@ const RentModal = () => {
             return;
         }
         setIsLoading(true);
-        // ✅ 3. Levantamos la "bandera" antes de empezar
         isGeolocating.current = true;
         toast.loading('Obteniendo tu ubicación...', { id: 'location-toast' });
         
@@ -161,7 +156,6 @@ const RentModal = () => {
             async (position) => {
                 const { latitude, longitude } = position.coords;
 
-                // ✅ 4. Comprobamos si la ubicación está dentro de Costa Rica
                 const isInBounds = latitude >= costaRicaBounds.southWest.lat &&
                                  latitude <= costaRicaBounds.northEast.lat &&
                                  longitude >= costaRicaBounds.southWest.lng &&
@@ -170,7 +164,7 @@ const RentModal = () => {
                 if (!isInBounds) {
                     toast.error("Función solo disponible para ubicaciones dentro de Costa Rica.", { id: 'location-toast' });
                     setIsLoading(false);
-                    isGeolocating.current = false; // Bajamos la bandera
+                    isGeolocating.current = false;
                     return;
                 }
 
@@ -189,7 +183,6 @@ const RentModal = () => {
                 
                 toast.success("¡Ubicación encontrada!", { id: 'location-toast' });
                 setIsLoading(false);
-                // Bajamos la "bandera" un poco después para dar tiempo a que el estado se asiente
                 setTimeout(() => {
                     isGeolocating.current = false;
                 }, 100);
@@ -197,7 +190,6 @@ const RentModal = () => {
             (error) => {
                 toast.error("No se pudo obtener la ubicación.", { id: 'location-toast' });
                 setIsLoading(false);
-                // ✅ 3. Bajamos la "bandera" también en caso de error
                 isGeolocating.current = false;
             },
             { enableHighAccuracy: true }
@@ -227,18 +219,18 @@ const RentModal = () => {
     };
 
     const actionLabel = useMemo(() => {
-        if (step === STEPS.DESCRIPTION_PRICE) return "Crear";
-        return "Siguiente";
-    }, [step]);
+        if (step === STEPS.DESCRIPTION_PRICE) return t('create');
+        return t('next');
+    }, [step, t]);
 
     const secondaryActionLabel = useMemo(() => {
         if (step === STEPS.CATEGORY) return undefined;
-        return "Atrás";
-    }, [step]);
+        return t('back');
+    }, [step, t]);
 
     let bodyContent = (
         <div className="flex flex-col gap-8">
-            <Heading title="¿Cuál de estos describe mejor tu propiedad?" subtitle="Escoge una categoría" />
+            <Heading title={t('categoryStepTitle')} subtitle={t('categoryStepSubtitle')} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto">
                 {customCategories.map((item) => (
                     <div key={item.label} className="col-span-1">
@@ -252,16 +244,16 @@ const RentModal = () => {
     if (step === STEPS.LOCATION) {
         bodyContent = (
             <div className="flex flex-col gap-8">
-                <Heading title="¿Dónde se encuentra tu propiedad?" subtitle="¡Ayuda a los huéspedes a encontrarte!" />
+                <Heading title={t('locationStepTitle')} subtitle={t('locationStepSubtitle')} />
                 <select value={province} onChange={(e) => setCustomValue('province', e.target.value)} className="w-full p-4 font-light bg-white border-2 rounded-md outline-none transition disabled:opacity-70 disabled:cursor-not-allowed">
                     {Object.keys(provinceCoordinates).map(prov => <option key={prov} value={prov}>{prov}</option>)}
                 </select>
-                <Input id="address" label="Dirección (calle, número, señas)" disabled={isLoading} register={register} errors={errors} required />
+                <Input id="address" label={t('addressLabel')} disabled={isLoading} register={register} errors={errors} required />
                 <button onClick={handleGetLocation} className="p-4 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition">
-                    Usar mi ubicación actual
+                    {t('useMyLocation')}
                 </button>
                 <div className="relative h-[40vh] rounded-lg">
-                    <InfoPopup message="Puedes arrastrar el marcador para ajustar la ubicación." />
+                    <InfoPopup message={t('dragMarkerInfo')} />
                     <Map center={location?.latlng} zoom={mapZoom} onLocationChange={handleMapLocationChange} />
                 </div>
             </div>
@@ -271,22 +263,22 @@ const RentModal = () => {
     if (step === STEPS.INFO) {
         bodyContent = (
           <div className="flex flex-col gap-8">
-            <Heading title="Comparte información básica sobre tu propiedad" subtitle="¿Qué comodidades ofreces?" />
-            <Counter onChange={(value) => setCustomValue("roomCount", value)} value={roomCount} title="Habitaciones" subTitle="¿Cuántas habitaciones tienes?" />
+            <Heading title={t('infoStepTitle')} subtitle={t('infoStepSubtitle')} />
+            <Counter onChange={(value) => setCustomValue("roomCount", value)} value={roomCount} title={t('rooms')} subTitle={t('roomsSubtitle')} />
             <hr />
-            <Counter onChange={(value) => setCustomValue("bathroomCount", value)} value={bathroomCount} title="Baños" subTitle="¿Cuántos baños tienes?" />
+            <Counter onChange={(value) => setCustomValue("bathroomCount", value)} value={bathroomCount} title={t('bathrooms')} subTitle={t('bathroomsSubtitle')} />
             <hr />
-            <Counter onChange={(value) => setCustomValue("garageCount", value)} value={garageCount} title="Cochera para vehículo" subTitle="¿Cuántos vehículos caben?" minValue={0} />
+            <Counter onChange={(value) => setCustomValue("garageCount", value)} value={garageCount} title={t('garage')} subTitle={t('garageSubtitle')} minValue={0} />
             <hr />
-            <Heading title="¿Qué servicios y reglas ofreces?" subtitle="Selecciona lo que aplique." />
+            <Heading title={t('servicesTitle')} subtitle={t('servicesSubtitle')} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={includesWater} onChange={(e) => setValue("includesWater", e.target.checked)} className="w-5 h-5"/><span>Incluye Agua</span></label>
-              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={includesElectricity} onChange={(e) => setValue("includesElectricity", e.target.checked)} className="w-5 h-5"/><span>Incluye Electricidad</span></label>
-              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={includesInternet} onChange={(e) => setValue("includesInternet", e.target.checked)} className="w-5 h-5"/><span>Incluye Internet</span></label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={includesWater} onChange={(e) => setValue("includesWater", e.target.checked)} className="w-5 h-5"/><span>{t('includesWater')}</span></label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={includesElectricity} onChange={(e) => setValue("includesElectricity", e.target.checked)} className="w-5 h-5"/><span>{t('includesElectricity')}</span></label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={includesInternet} onChange={(e) => setValue("includesInternet", e.target.checked)} className="w-5 h-5"/><span>{t('includesInternet')}</span></label>
             </div>
             <hr />
-            <ToggleInput label="¿Permites niños?" value={allowsChildren} onChange={(value) => setCustomValue('allowsChildren', value)} />
-            <ToggleInput label="¿Permites mascotas?" value={allowsPets} onChange={(value) => setCustomValue('allowsPets', value)} />
+            <ToggleInput label={t('allowChildren')} value={allowsChildren} onChange={(value) => setCustomValue('allowsChildren', value)} />
+            <ToggleInput label={t('allowPets')} value={allowsPets} onChange={(value) => setCustomValue('allowsPets', value)} />
           </div>
         );
       }
@@ -294,7 +286,7 @@ const RentModal = () => {
     if (step === STEPS.IMAGES) {
         bodyContent = (
             <div className="flex flex-col gap-8">
-                <Heading title="Agrega una foto de tu propiedad" subtitle="¡Muéstrale a los huéspedes cómo se ve!" />
+                <Heading title={t('imagesStepTitle')} subtitle={t('imagesStepSubtitle')} />
                 <ImageUpload onChange={(value) => setCustomValue("imageSrc", value)} value={imageSrc} />
             </div>
         );
@@ -303,22 +295,22 @@ const RentModal = () => {
     if (step === STEPS.DESCRIPTION_PRICE) {
         bodyContent = (
             <div className="flex flex-col gap-8">
-                <Heading title="Describe tu propiedad" subtitle="¡Algo corto y atractivo funciona mejor!" />
-                <Input id="title" label="Título (ej: Apartamento moderno cerca de la ciudad)" disabled={isLoading} register={register} errors={errors} required />
+                <Heading title={t('descriptionStepTitle')} subtitle={t('descriptionStepSubtitle')} />
+                <Input id="title" label={t('listingTitleLabel')} disabled={isLoading} register={register} errors={errors} required />
                 <hr />
-                <Input id="description" label="Descripción" disabled={isLoading} register={register} errors={errors} required />
+                <Input id="description" label={t('descriptionLabel')} disabled={isLoading} register={register} errors={errors} required />
                 <hr />
-                <Heading title="Ahora, establece tu precio" subtitle="¿Cuánto cobras por mes?" />
-                <Input id="monthlyCost" label="Costo Mensual" formatPrice type="number" disabled={isLoading} register={register} errors={errors} required />
+                <Heading title={t('priceStepTitle')} subtitle={t('priceStepSubtitle')} />
+                <Input id="monthlyCost" label={t('monthlyCostLabel')} formatPrice type="number" disabled={isLoading} register={register} errors={errors} required />
                 <hr />
-                <Heading title="Información de Contacto" subtitle="¿Cómo te pueden contactar los interesados?" />
-                <Input id="contactPhone" label="Número de teléfono" type="tel" disabled={isLoading} register={register} errors={errors} required />
+                <Heading title={t('contactStepTitle')} subtitle={t('contactStepSubtitle')} />
+                <Input id="contactPhone" label={t('phoneLabel')} type="tel" disabled={isLoading} register={register} errors={errors} required />
                 <div className="flex items-center gap-2">
                     <input type="checkbox" {...register('isWhatsappSame')} id="isWhatsappSame" className="w-5 h-5" />
-                    <label htmlFor="isWhatsappSame">Mi número de WhatsApp es el mismo.</label>
+                    <label htmlFor="isWhatsappSame">{t('sameWhatsapp')}</label>
                 </div>
                 {!isWhatsappSame && (
-                    <Input id="contactWhatsapp" label="Número de WhatsApp" type="tel" disabled={isLoading} register={register} errors={errors} required />
+                    <Input id="contactWhatsapp" label={t('whatsappLabel')} type="tel" disabled={isLoading} register={register} errors={errors} required />
                 )}
             </div>
         );
@@ -328,7 +320,7 @@ const RentModal = () => {
         <Modal
             disabled={isLoading}
             isOpen={rentModal.isOpen}
-            title="¡Publica tu propiedad en Casa Tica!"
+            title={t('title')}
             actionLabel={actionLabel}
             onSubmit={handleSubmit(onSubmit)}
             secondaryActionLabel={secondaryActionLabel}
