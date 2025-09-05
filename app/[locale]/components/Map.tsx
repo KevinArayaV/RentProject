@@ -51,6 +51,15 @@ const Map: React.FC<MapProps> = ({
   const markerRef = useRef<L.Marker>(null);
   const mapRef = useRef<L.Map | null>(null);
 
+  // Ensure map resizes correctly when rendered in a modal
+  useEffect(() => {
+    if (mapRef.current) {
+      setTimeout(() => {
+        mapRef.current?.invalidateSize();
+      }, 0);
+    }
+  }, []);
+
   const eventHandlers = useMemo(
     () => ({
       dragend() {
@@ -121,7 +130,7 @@ const Map: React.FC<MapProps> = ({
       center={mapCenter}
       zoom={mapZoom}
       scrollWheelZoom
-      className="h-[40vh] rounded-lg"
+      className="w-full h-full rounded-lg"
       ref={(map) => {
         if (map) mapRef.current = map;
       }}
@@ -132,25 +141,23 @@ const Map: React.FC<MapProps> = ({
       />
 
       {rectangleBounds && (
-        <Rectangle
-          bounds={rectangleBounds}
-          pathOptions={{
-            color: "#FF5A5F",
-            weight: 2,
-            opacity: 0.8,
-            fillOpacity: 0.15,
-          }}
-        />
+      <Rectangle
+        bounds={rectangleBounds}
+        pathOptions={{
+          color: "#FF5A5F",
+          weight: 2,
+          opacity: 0.8,
+          fillOpacity: 0.15,
+        }}
+      />
       )}
 
-      {center && (
-        <Marker
-          draggable
-          eventHandlers={eventHandlers}
-          position={mapCenter}
-          ref={markerRef}
-        />
-      )}
+      <Marker
+        draggable
+        eventHandlers={eventHandlers}
+        position={mapCenter}
+        ref={markerRef}
+      />
 
       <MapUpdater center={mapCenter} zoom={mapZoom} bbox={bbox} />
     </MapContainer>
