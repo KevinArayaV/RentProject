@@ -5,16 +5,12 @@ import { toast } from "react-hot-toast";
 import { FieldValues, SubmitHandler, useForm } from "react-hook-form";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { IoMdHome } from 'react-icons/io';
 import { MdApartment } from 'react-icons/md';
-import { Feature } from 'geojson';
-import { useTranslations } from "next-intl";
-import * as turf from '@turf/turf';
-
-import useCostaRicaDivisions from "../../../hooks/useCostaRicaDivisions";
 import useRentModal from "../../../hooks/useRentModal";
-
+import { useTranslations } from "next-intl";
+import locationsData from '@/app/data/costa-rica-locations.json';
 import Modal from "./Modal";
 import Counter from "../inputs/Counter";
 import CategoryInput from "../inputs/CategoryInput";
@@ -37,25 +33,20 @@ enum STEPS {
   DESCRIPTION_PRICE = 4,
 }
 
-const initialCenter: [number, number] = [9.9281, -84.0907];
+const costaRicaBounds = {
+  southWest: { lat: 8.04, lng: -87.09 },
+  northEast: { lat: 11.23, lng: -82.56 },
+};
 
 const RentModal = () => {
     const t = useTranslations('RentModal');
     const router = useRouter();
     const rentModal = useRentModal();
+    const [isLoading, setIsLoading] = useState(false);
     const [step, setStep] = useState(STEPS.CATEGORY);
-    const [isGeolocating, setIsGeolocating] = useState(false);
-
-    const { 
-        getProvinces, 
-        getCantonsByProvince, 
-        getDistrictsByCanton, 
-        findLocationByCoords, 
-        allData: geoJsonData,
-        isLoading: isLocationDataLoading
-    } = useCostaRicaDivisions();
-
-    const [mapBoundary, setMapBoundary] = useState<Feature | undefined>(undefined);
+    const [mapZoom, setMapZoom] = useState(8);
+    const [selectedFeature, setSelectedFeature] = useState<any>(null);
+    const isGeolocating = useRef(false);
 
     const {
         register,
@@ -67,10 +58,7 @@ const RentModal = () => {
     } = useForm<FieldValues>({
         defaultValues: {
             category: "",
-            location: initialCenter,
-            province: "",
-            canton: "",
-            district: "",
+            location: null,
             roomCount: 1,
             bathroomCount: 1,
             garageCount: 0,
@@ -84,18 +72,16 @@ const RentModal = () => {
             allowsPets: true,
             monthlyCost: "",
             address: "",
+            province: null,
+            canton: null,
+            district: null,
             contactPhone: "",
             contactWhatsapp: "",
         },
     });
 
-    const location = watch("location");
     const category = watch("category");
-    const contactPhone = watch("contactPhone");
-    const isWhatsappSame = watch("isWhatsappSame");
-    const province = watch("province");
-    const canton = watch("canton");
-    const district = watch("district");
+    const location = watch("location");
     const roomCount = watch("roomCount");
     const bathroomCount = watch("bathroomCount");
     const garageCount = watch("garageCount");
@@ -105,70 +91,156 @@ const RentModal = () => {
     const includesInternet = watch("includesInternet");
     const allowsChildren = watch("allowsChildren");
     const allowsPets = watch("allowsPets");
+    const monthlyCost = watch("monthlyCost");
+    const province = watch("province");
+    const canton = watch("canton");
+    const district = watch("district");
+    const contactPhone = watch("contactPhone");
+    const isWhatsappSame = watch("isWhatsappSame");
 
-    const Map = useMemo(() => dynamic(() => import('../Map'), { ssr: false }), []);
+    const Map = useMemo(() =>
+        dynamic(() => import('../Map'), { 
+            ssr: false
+        }),
+    []);
 
     const setCustomValue = useCallback((id: string, value: any) => {
-        setValue(id, value, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+        setValue(id, value, {
+            shouldDirty: true,
+            shouldTouch: true,
+            shouldValidate: true,
+        });
     }, [setValue]);
 
-    useEffect(() => {
-        if (isWhatsappSame) setValue('contactWhatsapp', contactPhone);
-    }, [contactPhone, isWhatsappSame, setValue]);
-
-    useEffect(() => {
-        if (!geoJsonData) return;
-
-        let feature;
-        if (district) {
-            feature = geoJsonData.districts.features.find(f => f.properties.distrito === district && f.properties.canton === canton);
-        } else if (canton) {
-            feature = geoJsonData.cantons.features.find(f => f.properties.canton === canton && f.properties.provincia === province);
-        } else if (province) {
-            feature = geoJsonData.provinces.features.find(f => f.properties.provincia === province);
-        }
-        
-        setMapBoundary(feature as Feature | undefined);
-
-        if (feature) {
-            const center = turf.centerOfMass(feature).geometry.coordinates;
-            setCustomValue('location', [center[1], center[0]]);
-        }
-
-    }, [province, canton, district, geoJsonData, setCustomValue]);
-
-    const handleMapLocationChange = useCallback((newLocation: [number, number]) => {
-        setCustomValue('location', newLocation);
-        const found = findLocationByCoords({ lat: newLocation[0], lng: newLocation[1] });
-        
-        if (found) {
-            setCustomValue('province', found.province);
-            setCustomValue('canton', found.canton || '');
-            setCustomValue('district', found.district || '');
-        }
-    }, [setCustomValue, findLocationByCoords]);
-
+    // AQUÍ ESTÁ LA FUNCIÓN QUE FALTABA:
     const handleGetLocation = useCallback(() => {
         if (!navigator.geolocation) {
             toast.error("Tu navegador no soporta geolocalización.");
             return;
         }
-        setIsGeolocating(true);
+        
+        setIsLoading(true);
+        isGeolocating.current = true;
         toast.loading('Obteniendo tu ubicación...', { id: 'location-toast' });
         
         navigator.geolocation.getCurrentPosition(
-            (position) => {
+            async (position) => {
+                const { latitude, longitude } = position.coords;
+
+                const isInBounds = latitude >= costaRicaBounds.southWest.lat &&
+                                 latitude <= costaRicaBounds.northEast.lat &&
+                                 longitude >= costaRicaBounds.southWest.lng &&
+                                 longitude <= costaRicaBounds.northEast.lng;
+                
+                if (!isInBounds) {
+                    toast.error("Función solo disponible para ubicaciones dentro de Costa Rica.", { id: 'location-toast' });
+                    setIsLoading(false);
+                    isGeolocating.current = false;
+                    return;
+                }
+
+                setCustomValue("location", { latlng: [latitude, longitude] });
+                setMapZoom(16);
+                
+                // Intentar encontrar la provincia/cantón basado en las coordenadas
+                handleMapLocationChange([latitude, longitude]);
+                
                 toast.success("¡Ubicación encontrada!", { id: 'location-toast' });
-                handleMapLocationChange([position.coords.latitude, position.coords.longitude]);
-                setIsGeolocating(false);
+                setIsLoading(false);
+                setTimeout(() => {
+                    isGeolocating.current = false;
+                }, 100);
             },
-            () => {
+            (error) => {
                 toast.error("No se pudo obtener la ubicación.", { id: 'location-toast' });
-                setIsGeolocating(false);
+                setIsLoading(false);
+                isGeolocating.current = false;
             },
             { enableHighAccuracy: true }
         );
-    }, [handleMapLocationChange]);
+    }, [setCustomValue]);
+
+    const handleMapLocationChange = useCallback((newLocation: [number, number]) => {
+        setCustomValue('location', { latlng: newLocation });
+        
+        // Buscar en qué provincia/cantón está el punto
+        const findLocationFromCoords = (lat: number, lng: number) => {
+            for (const [provCode, provincia] of Object.entries(locationsData.provincias)) {
+                const provBbox = provincia.bbox;
+                
+                if (lng >= provBbox[0] && lng <= provBbox[2] && 
+                    lat >= provBbox[1] && lat <= provBbox[3]) {
+                    
+                    // Buscar en cantones
+                    for (const [cantonCode, canton] of Object.entries(provincia.cantones)) {
+                        if (canton.bbox) {
+                            const cantonBbox = canton.bbox;
+                            if (lng >= cantonBbox[0] && lng <= cantonBbox[2] && 
+                                lat >= cantonBbox[1] && lat <= cantonBbox[3]) {
+                                
+                                setCustomValue('province', provCode);
+                                setCustomValue('canton', cantonCode);
+                                setCustomValue('district', null);
+                                
+                                setSelectedFeature({
+                                    type: 'Feature',
+                                    properties: {},
+                                    geometry: {
+                                        type: 'Polygon',
+                                        coordinates: [[
+                                            [cantonBbox[0], cantonBbox[1]],
+                                            [cantonBbox[2], cantonBbox[1]],
+                                            [cantonBbox[2], cantonBbox[3]],
+                                            [cantonBbox[0], cantonBbox[3]],
+                                            [cantonBbox[0], cantonBbox[1]]
+                                        ]]
+                                    }
+                                });
+                                
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // Solo provincia encontrada
+                    setCustomValue('province', provCode);
+                    setCustomValue('canton', null);
+                    setCustomValue('district', null);
+                    
+                    setSelectedFeature({
+                        type: 'Feature',
+                        properties: {},
+                        geometry: {
+                            type: 'Polygon',
+                            coordinates: [[
+                                [provBbox[0], provBbox[1]],
+                                [provBbox[2], provBbox[1]],
+                                [provBbox[2], provBbox[3]],
+                                [provBbox[0], provBbox[3]],
+                                [provBbox[0], provBbox[1]]
+                            ]]
+                        }
+                    });
+                    
+                    return;
+                }
+            }
+            
+            // No encontrado
+            setCustomValue('province', null);
+            setCustomValue('canton', null);
+            setCustomValue('district', null);
+            setSelectedFeature(null);
+        };
+        
+        findLocationFromCoords(newLocation[0], newLocation[1]);
+    }, [setCustomValue]);
+    
+    useEffect(() => {
+        if (isWhatsappSame) {
+            setValue('contactWhatsapp', contactPhone);
+        }
+    }, [contactPhone, isWhatsappSame, setValue]);
 
     const onBack = () => setStep((value) => value - 1);
     const onNext = () => setStep((value) => value + 1);
@@ -188,10 +260,15 @@ const RentModal = () => {
             .finally(() => setIsLoading(false));
     };
 
-    const actionLabel = useMemo(() => (step === STEPS.DESCRIPTION_PRICE ? t('create') : t('next')), [step, t]);
-    const secondaryActionLabel = useMemo(() => (step === STEPS.CATEGORY ? undefined : t('back')), [step, t]);
+    const actionLabel = useMemo(() => {
+        if (step === STEPS.DESCRIPTION_PRICE) return t('create');
+        return t('next');
+    }, [step, t]);
 
-    // --- RENDERIZADO DEL MODAL ---
+    const secondaryActionLabel = useMemo(() => {
+        if (step === STEPS.CATEGORY) return undefined;
+        return t('back');
+    }, [step, t]);
 
     let bodyContent = (
         <div className="flex flex-col gap-8">
@@ -199,12 +276,7 @@ const RentModal = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto">
                 {customCategories.map((item) => (
                     <div key={item.label} className="col-span-1">
-                        <CategoryInput 
-                            onClick={(cat) => setCustomValue("category", cat)} 
-                            selected={category === item.label} 
-                            label={item.label} 
-                            icon={item.icon} 
-                        />
+                        <CategoryInput onClick={(cat) => setCustomValue("category", cat)} selected={category === item.label} label={item.label} icon={item.icon} />
                     </div>
                 ))}
             </div>
@@ -212,64 +284,166 @@ const RentModal = () => {
     );
 
     if (step === STEPS.LOCATION) {
-        const provincesList = getProvinces();
-        const cantonsList = getCantonsByProvince(province);
-        const districtsList = getDistrictsByCanton(province, canton);
+        const provinces = Object.entries(locationsData.provincias).map(([code, data]) => ({
+            value: code,
+            label: data.nombre,
+            bbox: data.bbox,
+        }));
+        
+        const cantons = province ? Object.entries(locationsData.provincias[province]?.cantones || {}).map(([code, data]) => ({
+            value: code,
+            label: data.nombre,
+            bbox: data.bbox,
+        })) : [];
+        
+        const districts = (province && canton) ? Object.entries(locationsData.provincias[province]?.cantones[canton]?.distritos || {}).map(([code, data]) => ({
+            value: code,
+            label: data as string,
+        })) : [];
 
         bodyContent = (
-            <div className="flex flex-col gap-4">
-                <Heading title={t('locationStepTitle')} subtitle={t('locationStepSubtitle')} />
+            <div className="flex flex-col gap-8">
+                <Heading 
+                    title={t('locationStepTitle')} 
+                    subtitle={t('locationStepSubtitle')} 
+                />
                 
-                <select 
-                    value={province} 
-                    onChange={(e) => {
-                        setCustomValue('province', e.target.value);
-                        setCustomValue('canton', '');
-                        setCustomValue('district', '');
-                    }} 
-                    className="w-full p-4 font-light bg-white border-2 rounded-md outline-none"
-                >
-                    <option value="">Selecciona una Provincia</option>
-                    {provincesList.map(p => <option key={p.properties.provincia} value={p.properties.provincia}>{p.properties.provincia}</option>)}
-                </select>
+                <div className="flex flex-col gap-4">
+                    <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">
+                            Provincia
+                        </label>
+                        <select 
+                            value={province || ''} 
+                            onChange={(e) => {
+                                const selected = provinces.find(p => p.value === e.target.value);
+                                setCustomValue('province', e.target.value || null);
+                                setCustomValue('canton', null);
+                                setCustomValue('district', null);
+                                
+                                if (selected?.bbox) {
+                                    const centerLng = (selected.bbox[0] + selected.bbox[2]) / 2;
+                                    const centerLat = (selected.bbox[1] + selected.bbox[3]) / 2;
+                                    setCustomValue('location', { latlng: [centerLat, centerLng] });
+                                    
+                                    setSelectedFeature({
+                                        type: 'Feature',
+                                        properties: {},
+                                        geometry: {
+                                            type: 'Polygon',
+                                            coordinates: [[
+                                                [selected.bbox[0], selected.bbox[1]],
+                                                [selected.bbox[2], selected.bbox[1]],
+                                                [selected.bbox[2], selected.bbox[3]],
+                                                [selected.bbox[0], selected.bbox[3]],
+                                                [selected.bbox[0], selected.bbox[1]]
+                                            ]]
+                                        }
+                                    });
+                                }
+                            }}
+                            className="w-full p-3 font-light bg-white border-2 rounded-md outline-none transition disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                            <option value="">Seleccione una provincia</option>
+                            {provinces.map(p => (
+                                <option key={p.value} value={p.value}>{p.label}</option>
+                            ))}
+                        </select>
+                    </div>
 
-                <select 
-                    value={canton} 
-                    onChange={(e) => {
-                        setCustomValue('canton', e.target.value);
-                        setCustomValue('district', '');
-                    }} 
-                    disabled={!province} 
-                    className="w-full p-4 font-light bg-white border-2 rounded-md outline-none disabled:opacity-70"
-                >
-                    <option value="">Selecciona un Cantón</option>
-                    {cantonsList.map(c => <option key={c.properties.canton} value={c.properties.canton}>{c.properties.canton}</option>)}
-                </select>
+                    <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">
+                            Cantón
+                        </label>
+                        <select 
+                            value={canton || ''} 
+                            onChange={(e) => {
+                                const selected = cantons.find(c => c.value === e.target.value);
+                                setCustomValue('canton', e.target.value || null);
+                                setCustomValue('district', null);
+                                
+                                if (selected?.bbox) {
+                                    const centerLng = (selected.bbox[0] + selected.bbox[2]) / 2;
+                                    const centerLat = (selected.bbox[1] + selected.bbox[3]) / 2;
+                                    setCustomValue('location', { latlng: [centerLat, centerLng] });
+                                    
+                                    setSelectedFeature({
+                                        type: 'Feature',
+                                        properties: {},
+                                        geometry: {
+                                            type: 'Polygon',
+                                            coordinates: [[
+                                                [selected.bbox[0], selected.bbox[1]],
+                                                [selected.bbox[2], selected.bbox[1]],
+                                                [selected.bbox[2], selected.bbox[3]],
+                                                [selected.bbox[0], selected.bbox[3]],
+                                                [selected.bbox[0], selected.bbox[1]]
+                                            ]]
+                                        }
+                                    });
+                                }
+                            }}
+                            disabled={!province}
+                            className="w-full p-3 font-light bg-white border-2 rounded-md outline-none transition disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                            <option value="">Seleccione un cantón</option>
+                            {cantons.map(c => (
+                                <option key={c.value} value={c.value}>{c.label}</option>
+                            ))}
+                        </select>
+                    </div>
 
-                <select 
-                    value={district}
-                    onChange={(e) => setCustomValue('district', e.target.value)}
-                    disabled={!canton} 
-                    className="w-full p-4 font-light bg-white border-2 rounded-md outline-none disabled:opacity-70"
-                >
-                    <option value="">Selecciona un Distrito</option>
-                    {districtsList.map(d => <option key={d.properties.distrito} value={d.properties.distrito}>{d.properties.distrito}</option>)}
-                </select>
-
-                <Input id="address" label={t('addressLabel')} disabled={isGeolocating} register={register} errors={errors} required />
+                    <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">
+                            Distrito
+                        </label>
+                        <select 
+                            value={district || ''} 
+                            onChange={(e) => {
+                                setCustomValue('district', e.target.value || null);
+                            }}
+                            disabled={!canton}
+                            className="w-full p-3 font-light bg-white border-2 rounded-md outline-none transition disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                            <option value="">Seleccione un distrito</option>
+                            {districts.map(d => (
+                                <option key={d.value} value={d.value}>{d.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
                 
-                <button onClick={handleGetLocation} disabled={isGeolocating} className="p-4 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition disabled:bg-rose-300">
-                    {isGeolocating ? 'Buscando...' : t('useMyLocation')}
+                <Input 
+                    id="address" 
+                    label={t('addressLabel')} 
+                    disabled={isLoading} 
+                    register={register} 
+                    errors={errors} 
+                    required 
+                />
+                
+                <button 
+                    onClick={handleGetLocation} 
+                    className="p-4 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition"
+                    type="button"
+                >
+                    {t('useMyLocation')}
                 </button>
-
-                <div className="relative h-[40vh] rounded-lg mt-2">
+                
+                <div className="relative h-[40vh] rounded-lg">
                     <InfoPopup message={t('dragMarkerInfo')} />
-                    <Map center={location} onLocationChange={handleMapLocationChange} boundary={mapBoundary} />
+                    <Map 
+                        center={location?.latlng} 
+                        zoom={mapZoom}
+                        selectedFeature={selectedFeature}
+                        onLocationChange={handleMapLocationChange} 
+                    />
                 </div>
             </div>
         );
     }
 
+    // Resto de los steps (INFO, IMAGES, DESCRIPTION_PRICE) permanecen igual...
     if (step === STEPS.INFO) {
         bodyContent = (
           <div className="flex flex-col gap-8">
@@ -306,21 +480,21 @@ const RentModal = () => {
         bodyContent = (
             <div className="flex flex-col gap-8">
                 <Heading title={t('descriptionStepTitle')} subtitle={t('descriptionStepSubtitle')} />
-                <Input id="title" label={t('listingTitleLabel')} disabled={isGeolocating} register={register} errors={errors} required />
+                <Input id="title" label={t('listingTitleLabel')} disabled={isLoading} register={register} errors={errors} required />
                 <hr />
-                <Input id="description" label={t('descriptionLabel')} disabled={isGeolocating} register={register} errors={errors} required />
+                <Input id="description" label={t('descriptionLabel')} disabled={isLoading} register={register} errors={errors} required />
                 <hr />
                 <Heading title={t('priceStepTitle')} subtitle={t('priceStepSubtitle')} />
-                <Input id="monthlyCost" label={t('monthlyCostLabel')} formatPrice type="number" disabled={isGeolocating} register={register} errors={errors} required />
+                <Input id="monthlyCost" label={t('monthlyCostLabel')} formatPrice type="number" disabled={isLoading} register={register} errors={errors} required />
                 <hr />
                 <Heading title={t('contactStepTitle')} subtitle={t('contactStepSubtitle')} />
-                <Input id="contactPhone" label={t('phoneLabel')} type="tel" disabled={isGeolocating} register={register} errors={errors} required />
+                <Input id="contactPhone" label={t('phoneLabel')} type="tel" disabled={isLoading} register={register} errors={errors} required />
                 <div className="flex items-center gap-2">
                     <input type="checkbox" {...register('isWhatsappSame')} id="isWhatsappSame" className="w-5 h-5" />
                     <label htmlFor="isWhatsappSame">{t('sameWhatsapp')}</label>
                 </div>
                 {!isWhatsappSame && (
-                    <Input id="contactWhatsapp" label={t('whatsappLabel')} type="tel" disabled={isGeolocating} register={register} errors={errors} required />
+                    <Input id="contactWhatsapp" label={t('whatsappLabel')} type="tel" disabled={isLoading} register={register} errors={errors} required />
                 )}
             </div>
         );
@@ -328,7 +502,7 @@ const RentModal = () => {
 
     return (
         <Modal
-            disabled={isGeolocating}
+            disabled={isLoading}
             isOpen={rentModal.isOpen}
             title={t('title')}
             actionLabel={actionLabel}
