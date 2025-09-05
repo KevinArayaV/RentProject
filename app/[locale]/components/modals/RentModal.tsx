@@ -316,12 +316,12 @@ const RentModal = () => {
                 </button>
                 
                 {Map && (
-                    <div className="relative h-[40vh] rounded-lg">
+            <div className="relative h-[40vh] rounded-lg overflow-hidden">
                         <InfoPopup message={t('dragMarkerInfo')} />
-                        <Map 
-                            center={location?.latlng} 
+                        <Map
+                            center={location?.latlng}
                             selectedFeature={selectedFeature}
-                            onLocationChange={handleMapLocationChange} 
+                            onLocationChange={handleMapLocationChange}
                         />
                     </div>
                 )}
