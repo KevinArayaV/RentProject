@@ -246,7 +246,8 @@ const RentModal = () => {
 
   if (step === STEPS.LOCATION) {
     bodyContent = (
-      <div className="flex flex-col gap-4 h-[60vh]">
+      // 1. REMOVED h-[60vh] FROM THIS PARENT CONTAINER
+      <div className="flex flex-col gap-4">
         <Heading
           title={t("locationStepTitle")}
           subtitle={t("locationStepSubtitle")}
@@ -355,7 +356,8 @@ const RentModal = () => {
         </button>
 
         {Map && (
-          <div className="relative flex-1 rounded-lg overflow-hidden">
+          // 2. REPLACED flex-1 WITH h-[40vh] ON THE MAP CONTAINER
+          <div className="relative h-[40vh] rounded-lg overflow-hidden">
             <InfoPopup message={t("dragMarkerInfo")} />
             <Map
               center={location?.latlng}
