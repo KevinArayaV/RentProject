@@ -5,7 +5,7 @@ import {
   MapContainer,
   TileLayer,
   Marker,
-  Rectangle,
+  GeoJSON as RLGeoJSON,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -209,36 +209,44 @@ const Map: React.FC<MapProps> = ({
 
   // Calculate bounding box from selected feature
   const bbox = useMemo(() => {
-    if (selectedFeature?.geometry?.coordinates?.[0]) {
-      const coords = selectedFeature.geometry.coordinates[0];
-      if (coords.length >= 4) {
-        let minLng = coords[0][0];
-        let maxLng = coords[0][0];
-        let minLat = coords[0][1];
-        let maxLat = coords[0][1];
-
-        coords.forEach((coord: number[]) => {
-          minLng = Math.min(minLng, coord[0]);
-          maxLng = Math.max(maxLng, coord[0]);
-          minLat = Math.min(minLat, coord[1]);
-          maxLat = Math.max(maxLat, coord[1]);
-        });
-
-        return [minLng, minLat, maxLng, maxLat] as [number, number, number, number];
+    if (!selectedFeature) return null;
+    try {
+      const layer = L.geoJSON(selectedFeature as any);
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) {
+        return [
+          bounds.getWest(),
+          bounds.getSouth(),
+          bounds.getEast(),
+          bounds.getNorth(),
+        ] as [number, number, number, number];
       }
+    } catch (e) {
+      // ignore
     }
     return null;
   }, [selectedFeature]);
 
-  const rectangleBounds = useMemo(() => {
-    if (bbox && bbox.length === 4) {
-      return [
-        [bbox[1], bbox[0]],
-        [bbox[3], bbox[2]],
-      ] as [[number, number], [number, number]];
+  // Styling for the selected polygon feature
+  const selectedStyle = useMemo(() => ({
+    color: "#FF5A5F",
+    weight: 2,
+    opacity: 0.2, // border opacity ~80% transparent
+    fillColor: "#FF5A5F",
+    fillOpacity: 0.1, // reduced fill opacity for subtler highlight
+  }), []);
+
+  // Force re-mount GeoJSON layer when feature changes to avoid stale outlines
+  const featureKey = useMemo(() => {
+    if (!selectedFeature) return 'none';
+    const id = selectedFeature?.properties?.shapeID;
+    if (id) return String(id);
+    try {
+      return JSON.stringify(selectedFeature.geometry);
+    } catch {
+      return Math.random().toString(36).slice(2);
     }
-    return null;
-  }, [bbox]);
+  }, [selectedFeature]);
 
   // Handle marker drag end
   const handleMarkerDragEnd = (newPosition: L.LatLng) => {
@@ -287,15 +295,12 @@ const Map: React.FC<MapProps> = ({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
 
-        {rectangleBounds && (
-          <Rectangle
-            bounds={rectangleBounds}
-            pathOptions={{
-              color: "#FF5A5F",
-              weight: 2,
-              opacity: 0.8,
-              fillOpacity: 0.15,
-            }}
+        {selectedFeature && (
+          <RLGeoJSON
+            key={featureKey}
+            data={selectedFeature as any}
+            style={selectedStyle as any}
+            interactive={false}
           />
         )}
 

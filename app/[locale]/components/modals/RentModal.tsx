@@ -269,6 +269,8 @@ const RentModal = () => {
                 setCustomValue("district", "");
                 if (selected?.feature) {
                   setFeatureCenter(selected.feature);
+                } else {
+                  setSelectedFeature(null);
                 }
               }}
               className="w-full p-3 font-light bg-white border-2 rounded-md outline-none transition"
@@ -296,6 +298,8 @@ const RentModal = () => {
                 setCustomValue("district", "");
                 if (selected?.feature) {
                   setFeatureCenter(selected.feature);
+                } else {
+                  setSelectedFeature(null);
                 }
               }}
               disabled={!province}
@@ -323,6 +327,8 @@ const RentModal = () => {
                 setCustomValue("district", e.target.value);
                 if (selected?.feature) {
                   setFeatureCenter(selected.feature);
+                } else {
+                  setSelectedFeature(null);
                 }
               }}
               disabled={!canton}
